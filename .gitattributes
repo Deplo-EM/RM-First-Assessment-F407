@@ -1,0 +1,18 @@
+# ---- line endings: one rule to rule them all ----
+* text=auto eol=lf
+
+# Windows batch files must stay CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ---- binaries: never convert ----
+*.elf binary
+*.hex binary
+*.bin binary
+*.o   binary
+*.a   binary
+*.exe binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary

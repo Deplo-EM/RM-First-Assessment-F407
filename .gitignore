@@ -1,0 +1,18 @@
+# ---- build output (never commit) ----
+build/
+build_pc/
+*.elf
+*.hex
+*.bin
+*.map
+*.o
+*.d
+
+# ---- course material: keep it OUT of the public repo ----
+ref/
+
+# ---- editor / OS junk ----
+.vs/
+.vscode/ipch/
+Thumbs.db
+desktop.ini
