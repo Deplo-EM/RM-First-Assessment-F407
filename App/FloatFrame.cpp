@@ -2,7 +2,7 @@
  * @Author: Redistuo 15869483306@163.com
  * @Date: 2026-09-29 19:22:16
  * @LastEditors: Redistuo 15869483306@163.com
- * @LastEditTime: 2026-09-30 19:18:11
+ * @LastEditTime: 2026-09-30 19:41:35
  * @FilePath: \undefinedd:\ForTest\C_project\App\FloatFrame.cpp
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -23,7 +23,9 @@
 #include <cstring>  // memcpy（取浮点数的二进制位时必须用它，不能强转指针）
 
 namespace rm {
-
+namespace {
+constexpr uint8_t kFrameTail[4] = {0x00, 0x00, 0x80, 0x7F};
+} 
 // ---------------------------------------------------------------------------
 //  reset()：把这一帧清空
 //
@@ -65,7 +67,12 @@ bool FloatFrame::push(float v) {
   if (count_ >= kMaxFloats) {
     return false;
   }
-  memcpy(buf_ + count_ * 4, &v, 4);
+  // bits 里已经是这个 float 的 32 位（上一行 memcpy 取出来的）
+// 按小端写入：低位字节放在低地址
+buf_[count_ * 4 + 0] = static_cast<uint8_t>(bits & 0xFFu);           // 最低 8 位
+buf_[count_ * 4 + 1] = static_cast<uint8_t>((bits >> 8) & 0xFFu);    // 次低 8 位
+buf_[count_ * 4 + 2] = static_cast<uint8_t>((bits >> 16) & 0xFFu);   // 第 3 个 8 位
+buf_[count_ * 4 + 3] = static_cast<uint8_t>((bits >> 24) & 0xFFu);   // 最高 8 位
   ++count_;
   constexpr uint8_t kFrameTail[4] = {0x00, 0x00, 0x80, 0x7F};
   memcpy(buf_ + count_ * 4, kFrameTail, 4);
