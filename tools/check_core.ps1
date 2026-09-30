@@ -57,16 +57,16 @@ $fails = @($out | Where-Object { "$_" -match '^\[FAIL\]' })
 
 Write-Host ""
 if ($code -eq 0) {
-  Write-Host "VERDICT: * ALL TESTS PASSED (B1 + B2 + B3 + B4 + B5)" -ForegroundColor Green
+  Write-Host "VERDICT: * ALL TESTS PASSED (B1 + B2 + B3 + B4 + B5 + B6)" -ForegroundColor Green
   Write-Host ""
-  Write-Host "Now answer the B5 questions in the level answer sheet (docs\ folder):"
-  Write-Host "  1) why is feeding the watchdog inside the 1 ms interrupt a bad idea ?"
-  Write-Host "  2) what are the three health conditions and what does each one catch ?"
-  Write-Host "  3) why must the timeout test use unsigned subtraction (now - last) ?"
+  Write-Host "Now answer the B6 questions in the level answer sheet (docs\ folder):"
+  Write-Host "  1) why does JustFloat need a 4-byte tail, and what breaks without it ?"
+  Write-Host "  2) why write the float bytes little-endian by hand instead of memcpy'ing the float ?"
+  Write-Host "  3) why must NaN / Inf be refused instead of sent as data ?"
 } else {
   Write-Host "VERDICT: NOT PASSED" -ForegroundColor Yellow
   $fails | ForEach-Object { Write-Host "  $_" }
   Write-Host ""
-  Write-Host "Hint: edit only the TODOs in App\WatchdogPolicy.cpp; do not change WatchdogPolicy.h"
+  Write-Host "Hint: edit only the TODOs in App\FloatFrame.cpp; do not change FloatFrame.h"
 }
 exit $code

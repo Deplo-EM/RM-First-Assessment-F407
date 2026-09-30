@@ -9,8 +9,11 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <limits>
 
 #include "AngleTrack.h"
+#include "FloatFrame.h"
 #include "Pid.h"
 #include "SafetyGuard.h"
 #include "SineRef.h"
@@ -57,6 +60,30 @@ void check_true(const char* name, bool cond, const char* detail) {
     return;
   }
   fail(name, detail);
+}
+
+// byte-wise comparison (used by B6); a null buffer is a failure, not a crash
+void check_bytes(const char* name, const uint8_t* got, const uint8_t* want, unsigned n) {
+  if (got == nullptr) {
+    fail(name, "buffer pointer is null");
+    return;
+  }
+  if (std::memcmp(got, want, n) == 0) {
+    ok(name);
+    return;
+  }
+  char buf[220];
+  int off = std::snprintf(buf, sizeof(buf), "got");
+  for (unsigned i = 0; i < n && off > 0 && off < static_cast<int>(sizeof(buf)) - 8; ++i) {
+    off += std::snprintf(buf + off, sizeof(buf) - static_cast<size_t>(off), " %02X", got[i]);
+  }
+  if (off > 0 && off < static_cast<int>(sizeof(buf)) - 8) {
+    off += std::snprintf(buf + off, sizeof(buf) - static_cast<size_t>(off), "  want");
+    for (unsigned i = 0; i < n && off > 0 && off < static_cast<int>(sizeof(buf)) - 8; ++i) {
+      off += std::snprintf(buf + off, sizeof(buf) - static_cast<size_t>(off), " %02X", want[i]);
+    }
+  }
+  fail(name, buf);
 }
 
 constexpr float kTol = 1e-3f;  // float comparison tolerance
@@ -705,6 +732,206 @@ int main() {
                w.shouldFeed(0xFFFFFFFEu), "wrap broke the timing");
     check_true("wrap: 7 ms later the control task is stale",
                !w.shouldFeed(0x00000000u), "wrap broke the timeout");
+  }
+
+  // ======================= B6: serial float frame =======================
+  std::printf("\n---- B6  serial float frame (FloatFrame) ----\n");
+
+  const uint8_t kTailBytes[4] = {0x00, 0x00, 0x80, 0x7F};
+
+  // 50. a fresh frame holds nothing but the tail
+  {
+    rm::FloatFrame f;
+    f.reset();
+    check_int("fresh: count() is 0", f.count(), 0);
+    check_int("fresh: size() is 4 (tail only)", f.size(), 4);
+    check_true("fresh: empty() is true", f.empty(), "empty() lied");
+    check_bytes("fresh: first 4 bytes are the tail", f.data(), kTailBytes, 4);
+  }
+
+  // 51. one float: little-endian payload, tail kept at the very end
+  {
+    rm::FloatFrame f;
+    f.reset();
+    check_true("push(1.0) returns true", f.push(1.0f), "push refused a plain value");
+    check_int("push(1.0): count() is 1", f.count(), 1);
+    check_int("push(1.0): size() is 8", f.size(), 8);
+    check_true("push(1.0): empty() is false", !f.empty(), "empty() lied");
+    const uint8_t want[8] = {0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x80, 0x7F};
+    check_bytes("push(1.0): payload 00 00 80 3F + tail", f.data(), want, 8);
+  }
+
+  // 52. byte order is little-endian (low byte first)
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(-1.0f);
+    const uint8_t want[8] = {0x00, 0x00, 0x80, 0xBF, 0x00, 0x00, 0x80, 0x7F};
+    check_bytes("push(-1.0): little-endian 00 00 80 BF", f.data(), want, 8);
+  }
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(0.5f);
+    const uint8_t want[8] = {0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x80, 0x7F};
+    check_bytes("push(0.5): little-endian 00 00 00 3F", f.data(), want, 8);
+  }
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(2.5f);
+    const uint8_t want[8] = {0x00, 0x00, 0x20, 0x40, 0x00, 0x00, 0x80, 0x7F};
+    check_bytes("push(2.5): little-endian 00 00 20 40", f.data(), want, 8);
+  }
+
+  // 53. zero is a legal value and must not disturb the tail
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(0.0f);
+    const uint8_t want[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x7F};
+    check_bytes("push(0.0): payload 00 00 00 00 + tail", f.data(), want, 8);
+    check_int("push(0.0): size() is still 8", f.size(), 8);
+  }
+
+  // 54. a non-round value: 3.14159f == 0x40490FD0
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(3.14159f);
+    const uint8_t want[8] = {0xD0, 0x0F, 0x49, 0x40, 0x00, 0x00, 0x80, 0x7F};
+    check_bytes("push(3.14159): 0x40490FD0 little-endian", f.data(), want, 8);
+  }
+
+  // 55. three channels - the shape used for the sine-tracking plot
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(1.0f);
+    f.push(-2.0f);
+    f.push(0.25f);
+    const uint8_t want[16] = {0x00, 0x00, 0x80, 0x3F,
+                              0x00, 0x00, 0x00, 0xC0,
+                              0x00, 0x00, 0x80, 0x3E,
+                              0x00, 0x00, 0x80, 0x7F};
+    check_bytes("3 channels: payload + one tail at the end", f.data(), want, 16);
+    check_int("3 channels: count() is 3", f.count(), 3);
+    check_int("3 channels: size() is 16", f.size(), 16);
+  }
+
+  // 56. size() grows by exactly 4 per float: size == count*4 + 4
+  {
+    rm::FloatFrame f;
+    f.reset();
+    bool shapeOk = true;
+    for (unsigned n = 0; n <= 5; ++n) {
+      if (f.size() != n * 4 + 4 || f.count() != n) {
+        shapeOk = false;
+      }
+      f.push(static_cast<float>(n));
+    }
+    check_true("size() == count()*4 + 4 while filling", shapeOk, "size/count disagree");
+  }
+
+  // 57. capacity: kMaxFloats (15) fit, the next one is refused
+  {
+    rm::FloatFrame f;
+    f.reset();
+    bool allAccepted = true;
+    for (unsigned i = 0; i < rm::FloatFrame::kMaxFloats; ++i) {
+      if (!f.push(static_cast<float>(i))) {
+        allAccepted = false;
+      }
+    }
+    check_true("15 floats fit (kMaxFloats)", allAccepted, "a legal push was refused");
+    check_int("full: count() is kMaxFloats", f.count(), rm::FloatFrame::kMaxFloats);
+    check_int("full: size() is exactly kCapacity", f.size(), rm::FloatFrame::kCapacity);
+    check_true("full: the 16th push is refused", !f.push(99.0f), "overflow was accepted");
+    check_int("full: count() unchanged after refusal", f.count(), rm::FloatFrame::kMaxFloats);
+    const uint8_t* p = f.data();
+    if (p != nullptr && f.size() >= 4) {
+      check_bytes("full: tail still sits at the very end", p + f.size() - 4, kTailBytes, 4);
+    } else {
+      fail("full: tail still sits at the very end", "frame smaller than one tail");
+    }
+  }
+
+  // 58. a refused push must not touch the buffer
+  {
+    rm::FloatFrame f;
+    f.reset();
+    for (unsigned i = 0; i < rm::FloatFrame::kMaxFloats; ++i) {
+      f.push(static_cast<float>(i));
+    }
+    uint8_t before[rm::FloatFrame::kCapacity] = {};
+    const uint16_t sizeBefore = f.size();
+    if (f.data() != nullptr) {
+      std::memcpy(before, f.data(), f.size());
+    }
+    check_true("overflow push returns false", !f.push(123.0f), "overflow was accepted");
+    check_int("overflow push leaves size() unchanged", f.size(), sizeBefore);
+    check_true("overflow push leaves the bytes unchanged",
+               f.data() != nullptr && std::memcmp(before, f.data(), f.size()) == 0,
+               "buffer was modified by a refused push");
+  }
+
+  // 59. reset() after a full frame makes it reusable
+  {
+    rm::FloatFrame f;
+    f.reset();
+    for (unsigned i = 0; i < rm::FloatFrame::kMaxFloats; ++i) {
+      f.push(1.0f);
+    }
+    f.reset();
+    check_int("after reset: count() is 0", f.count(), 0);
+    check_int("after reset: size() is 4", f.size(), 4);
+    check_true("after reset: push works again", f.push(1.0f), "reset did not free the frame");
+    check_int("after reset: count() is 1", f.count(), 1);
+  }
+
+  // 60. NaN / +Inf / -Inf are refused: they collide with the tail pattern
+  {
+    rm::FloatFrame f;
+    f.reset();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+    check_true("NaN is refused", !f.push(nan), "NaN was accepted");
+    check_true("+Inf is refused", !f.push(inf), "+Inf was accepted");
+    check_true("-Inf is refused", !f.push(-inf), "-Inf was accepted");
+    check_int("refused values leave count() at 0", f.count(), 0);
+    check_int("refused values leave size() at 4", f.size(), 4);
+    check_bytes("refused values leave the frame untouched", f.data(), kTailBytes, 4);
+  }
+
+  // 61. +Inf really is the tail pattern - that is why the check above matters
+  {
+    const float inf = std::numeric_limits<float>::infinity();
+    uint8_t bits[4] = {};
+    std::memcpy(bits, &inf, 4);
+    check_bytes("+Inf encodes as 00 00 80 7F (the tail)", bits, kTailBytes, 4);
+  }
+
+  // 62. after legal pushes the frame is still parseable: tail only at the end
+  {
+    rm::FloatFrame f;
+    f.reset();
+    f.push(1.5f);
+    f.push(2.5f);
+    check_int("2 floats: size() is 12", f.size(), 12);
+    const uint8_t* p = f.data();
+    bool tailOnlyAtEnd = (p != nullptr) && (f.size() == 12);
+    if (p != nullptr) {
+      for (uint16_t i = 0; i + 4 <= f.size(); i += 4) {
+        const bool isTail =
+            (p[i] == 0x00 && p[i + 1] == 0x00 && p[i + 2] == 0x80 && p[i + 3] == 0x7F);
+        const bool isLast = (i + 4 == f.size());
+        if (isTail != isLast) {
+          tailOnlyAtEnd = false;
+        }
+      }
+    }
+    check_true("tail appears exactly once, at the end", tailOnlyAtEnd,
+               "a tail pattern showed up in the middle");
   }
 
   std::printf("\npassed %d / %d\n", g_pass, g_pass + g_fail);
