@@ -28,7 +28,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+/* main.c 是 C 语言文件，不能 include 这个 C++ 头文件（里面的 <cstdint>、extern "C" 都是 C++ 的写法）。
+   所以这里只做"声明"：告诉 C 编译器"有两个这样的函数存在"。
+   它们的真正定义在 App\ControlTask.cpp 里，而且被 extern "C" 包着 →
+   链接时用的名字和 C 完全一致 → 一定能接上。 */
+extern void ControlTaskInit(void);
+extern void ControlTaskLoop(void);
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -104,7 +109,7 @@ int main(void)
   MX_USART6_UART_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+ControlTaskInit();  // 上电初始化：CAN、定时器、正弦目标、PID、护栏、喂狗
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -114,6 +119,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    ControlTaskLoop();  // 主循环心跳：喂狗、护栏
   }
   /* USER CODE END 3 */
 }

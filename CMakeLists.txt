@@ -45,11 +45,19 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    App/SineRef.cpp          # 正弦目标发生器
+    App/Pid.cpp              # PID 控制器
+    App/AngleTrack.cpp       # 多圈角度累计
+    App/SafetyGuard.cpp      # 安全护栏
+    App/WatchdogPolicy.cpp   # 喂狗策略
+    App/FloatFrame.cpp       # 串口波形帧
+    App/ControlTask.cpp   
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    App
 )
 
 # Add project symbols (macros)
