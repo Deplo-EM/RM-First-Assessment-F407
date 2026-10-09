@@ -1,11 +1,3 @@
-/*
- * @Author: Redistuo 15869483306@163.com
- * @Date: 2026-09-27 19:28:43
- * @LastEditors: Redistuo 15869483306@163.com
- * @LastEditTime: 2026-09-28 08:37:34
- * @FilePath: \undefinedd:\ForTest\C_project\App\Pid.h
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 // ============================================================================
 //  Pid.h —— 位置式 PID 控制器（B2 关）
 //

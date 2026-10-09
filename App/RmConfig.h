@@ -42,7 +42,10 @@ inline constexpr float kTempLimitC = 70.0f;
 inline constexpr float kTempHysteresisC = 5.0f;
 
 // 绝对电压上限（双保险）：就算 PID 的输出限幅被设错了，这里也会夹住
-inline constexpr float kSafeVoltageMax = 3000.0f;
+// 【为什么从 3000 改成 10000】协议满量程是 ±25000（≈满电压），
+//   3000 只占 12%（约 3V）—— 连起步都不够，更追不上 60 rpm 的目标（现场实测确认过）。
+//   10000 = 40%，够跟上 60 rpm，同时仍在"半程以内"，保留保守的安全余量。
+inline constexpr float kSafeVoltageMax = 10000.0f;
 
 // ---- 看门狗喂狗策略（B5 用）----
 // 1 kHz 控制任务："多久没跑过就算卡死"
